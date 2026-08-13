@@ -1401,20 +1401,26 @@ function wp_redirect( $location, $status = 302, $x_redirect_by = 'CosmicWord' ) 
 		wp_die( __( 'HTTP redirect status code must be a redirection code, 3xx.' ) );
 	}
 
-	// Check for improper URL sanitization using esc_html() or htmlspecialchars().
+	/*
+	 * Warn when the URL looks HTML-escaped (esc_html(), esc_attr() or htmlspecialchars()).
+	 * A Location header is not an HTML context, so an escaped URL here is a caller bug.
+	 *
+	 * This only reports; it must not rewrite $location. wp_safe_redirect() validates the
+	 * destination and then hands the result to this function, so any transformation applied
+	 * here happens after validation and would let a payload that passed the host check turn
+	 * into a different URL. See the entity-decode regression fixed in this commit.
+	 */
 	if ( strpos( $location, '&amp;' ) !== false || strpos( $location, '&#' ) !== false ) {
-		// Log a detailed message alerting the developer about improper sanitization
-		error_log( 'Warning: Improper URL sanitization detected in wp_redirect(). URL may have been sanitized using htmlspecialchars() or esc_html(). This is incorrect on any software using this function, we are the only one that alerts to it. Do not worry, we auto-secured wp_redirect for CosmicWord, just remove esc_html or htmlspecialchars, unless you are using this in an unforeseen way where somehow beyond what the underlying code says, that is required.' );
-
-		// Reverse the HTML entity encoding
-		$location = html_entity_decode( $location );
+		error_log(
+			'Notice: wp_redirect() received a URL containing HTML entities, which usually means '
+			. 'it was passed through esc_html(), esc_attr() or htmlspecialchars(). A Location '
+			. 'header is not an HTML context - pass the raw URL instead. For user-supplied '
+			. 'destinations use wp_safe_redirect(), which validates the target host.'
+		);
 	}
 
 	// Apply the wp_sanitize_redirect function to ensure the URL is safe.
 	$location = wp_sanitize_redirect( $location );
-
-	// Escape the URL properly using esc_url.
-	$location = esc_url( $location );
 
 	// Handle FastCGI and IIS.
 	if ( ! $is_IIS && 'cgi-fcgi' !== PHP_SAPI ) {

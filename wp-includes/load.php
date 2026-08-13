@@ -40,13 +40,13 @@ function wp_fix_server_vars() {
         'REQUEST_URI'     => '',
     );
 
-    // Merge with strict type checking
-    $_SERVER = array_merge(
-    $default_server_values,
-    array_map(function ($value) {
-        return is_array($value) ? json_encode($value) : strval($value);
-    }, $_SERVER)
-);
+    /*
+     * Merge defaults. Values are deliberately NOT coerced to strings here: $_SERVER
+     * legitimately holds non-strings (REQUEST_TIME is int, REQUEST_TIME_FLOAT is float,
+     * argv is an array under CLI/WP-CLI) and flattening them breaks those consumers.
+     * The individual keys this function touches are sanitized below.
+     */
+    $_SERVER = array_merge( $default_server_values, $_SERVER );
 
     // Sanitize critical server variables
     foreach (['REQUEST_URI', 'SCRIPT_NAME', 'PATH_INFO', 'PHP_SELF', 'SCRIPT_FILENAME', 'PATH_TRANSLATED'] as $key) {
@@ -64,11 +64,24 @@ function wp_fix_server_vars() {
     if (empty($_SERVER['REQUEST_URI']) 
         || ('cgi-fcgi' !== PHP_SAPI && preg_match('/^Microsoft-IIS\//', $_SERVER['SERVER_SOFTWARE']))
     ) {
-        // Sanitize and validate IIS-specific headers
-        if (isset($_SERVER['HTTP_X_ORIGINAL_URL'])) {
+        /*
+         * X-Original-URL and X-Rewrite-URL are client-supplied request headers. Honouring
+         * them lets a remote caller rewrite REQUEST_URI, which is a known bypass primitive
+         * for WAF rules and reverse-proxy access controls that match on the request path.
+         *
+         * They are only meaningful behind IIS Mod-Rewrite / Isapi_Rewrite, so CosmicWord
+         * ignores them unless the site explicitly opts in from wp-config.php:
+         *
+         *     define( 'COSMIC_TRUST_PROXY_URL_HEADERS', true );
+         *
+         * WordPress core still honours these unconditionally as of 7.0.4 (load.php:49-54).
+         */
+        $trust_proxy_url_headers = defined( 'COSMIC_TRUST_PROXY_URL_HEADERS' ) && COSMIC_TRUST_PROXY_URL_HEADERS;
+
+        if ($trust_proxy_url_headers && isset($_SERVER['HTTP_X_ORIGINAL_URL'])) {
             // IIS Mod-Rewrite
             $_SERVER['REQUEST_URI'] = filter_var($_SERVER['HTTP_X_ORIGINAL_URL'], FILTER_SANITIZE_URL);
-        } elseif (isset($_SERVER['HTTP_X_REWRITE_URL'])) {
+        } elseif ($trust_proxy_url_headers && isset($_SERVER['HTTP_X_REWRITE_URL'])) {
             // IIS Isapi_Rewrite
             $_SERVER['REQUEST_URI'] = filter_var($_SERVER['HTTP_X_REWRITE_URL'], FILTER_SANITIZE_URL);
         } else {
@@ -94,12 +107,16 @@ function wp_fix_server_vars() {
         }
     }
 
-    // Prevent path traversal in SCRIPT_FILENAME
-    if (isset($_SERVER['SCRIPT_FILENAME'])) {
-        $_SERVER['SCRIPT_FILENAME'] = realpath($_SERVER['SCRIPT_FILENAME']);
-        if (str_ends_with($_SERVER['SCRIPT_FILENAME'], 'php.cgi')) {
-            $_SERVER['SCRIPT_FILENAME'] = realpath($_SERVER['PATH_TRANSLATED']);
-        }
+    /*
+     * Fix for PHP as CGI hosts that set SCRIPT_FILENAME to something ending in php.cgi.
+     *
+     * realpath() is deliberately not used here: it returns false for a path that cannot be
+     * resolved (open_basedir restrictions, a symlinked docroot, a deleted file), which would
+     * replace SCRIPT_FILENAME with false and break every downstream consumer.
+     */
+    if (isset($_SERVER['SCRIPT_FILENAME']) && str_ends_with($_SERVER['SCRIPT_FILENAME'], 'php.cgi')
+        && isset($_SERVER['PATH_TRANSLATED'])) {
+        $_SERVER['SCRIPT_FILENAME'] = $_SERVER['PATH_TRANSLATED'];
     }
 
     // Fix for Dreamhost and other PHP as CGI hosts
@@ -107,11 +124,21 @@ function wp_fix_server_vars() {
         unset($_SERVER['PATH_INFO']);
     }
 
-    // Secure PHP_SELF fixing
-    $PHP_SELF = $_SERVER['PHP_SELF'] = filter_var(
-        preg_replace('/(\?.*)?$/', '', $_SERVER['REQUEST_URI']),
-        FILTER_SANITIZE_URL
-    );
+    /*
+     * Fix empty PHP_SELF.
+     *
+     * Only derive PHP_SELF from REQUEST_URI when the web server did not supply one. REQUEST_URI
+     * is attacker-controlled and FILTER_SANITIZE_URL preserves <, > and ", so assigning it
+     * unconditionally hands request data to every theme that echoes $_SERVER['PHP_SELF'].
+     */
+    $PHP_SELF = $_SERVER['PHP_SELF'];
+    if (empty($PHP_SELF)) {
+        $_SERVER['PHP_SELF'] = filter_var(
+            preg_replace('/(\?.*)?$/', '', $_SERVER['REQUEST_URI']),
+            FILTER_SANITIZE_URL
+        );
+        $PHP_SELF = $_SERVER['PHP_SELF'];
+    }
 
     // Only call if function exists
     if (function_exists('wp_populate_basic_auth_from_authorization_header')) {
