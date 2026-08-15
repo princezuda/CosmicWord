@@ -32,7 +32,13 @@ class Cosmic_Plugin_Search {
     public function add_security_headers() {
         // Add security headers for the iframe
         if (isset($_GET['page']) && $_GET['page'] === 'cosmic-plugin-search') {
-            header('Content-Security-Policy: frame-ancestors \'self\' https://cosmicword.com');
+            /*
+             * frame-ancestors controls who may frame THIS admin page - it must not list
+             * cosmicword.com, which would let that origin frame wp-admin and undo the
+             * clickjacking protection on the next line (browsers honour CSP over X-Frame-Options).
+             * frame-src is the directive that constrains what this page may embed.
+             */
+            header('Content-Security-Policy: frame-ancestors \'self\'; frame-src https://cosmicword.com');
             header('X-Frame-Options: SAMEORIGIN');
             header('X-Content-Type-Options: nosniff');
         }

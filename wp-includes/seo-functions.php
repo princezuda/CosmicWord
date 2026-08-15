@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 // wp-includes/cosmic/cosmic-seo.php
 
 if (!defined('ABSPATH')) {

@@ -20,7 +20,21 @@
     padding: 5px;
 }
 </style>
-wp_nonce_field('cosmicword_seo_nonce', 'cosmicword_seo_nonce');
+<?php
+/*
+ * This call was previously written outside PHP tags, so it rendered as literal page text
+ * and no nonce field was ever emitted - any handler verifying it would fail, and the form
+ * had no CSRF protection.
+ */
+wp_nonce_field( 'cosmicword_seo_nonce', 'cosmicword_seo_nonce' );
+
+// Meta values for the current post. Previously undefined, so every field rendered empty.
+$post_id         = isset( $post->ID ) ? (int) $post->ID : get_the_ID();
+$seo_title       = $post_id ? get_post_meta( $post_id, '_seo_title', true ) : '';
+$seo_description = $post_id ? get_post_meta( $post_id, '_seo_description', true ) : '';
+$seo_keywords    = $post_id ? get_post_meta( $post_id, '_seo_keywords', true ) : '';
+$seo_canonical   = $post_id ? get_post_meta( $post_id, '_seo_canonical', true ) : '';
+?>
 
 <div class="cosmicword-seo-container">
     <div class="cosmicword-seo-field">

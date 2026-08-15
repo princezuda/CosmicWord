@@ -216,9 +216,26 @@ function cosmic_get_download_info() {
     ];
 }
 
-// Remove standard WordPress update nags
+// Remove standard WordPress update nags shown to end users.
 remove_action('admin_notices', 'update_nag', 3);
 remove_action('admin_notices', 'maintenance_nag');
 
-// Disable core WordPress updates
-add_filter('pre_site_transient_update_core', '__return_null');
+/*
+ * Block automatic core updates.
+ *
+ * CosmicWord ships modified core files (pluggable.php, load.php, functions.php, ...) and
+ * version.php still reports the upstream $wp_version, so an automatic core update would
+ * install stock WordPress over this fork and wipe those changes. That must not happen.
+ *
+ * This uses WP_AUTO_UPDATE_CORE rather than filtering the update_core site transient to
+ * null. Both stop the updater, but nulling the transient also destroys the information:
+ * get_site_transient() short-circuits on any non-false value, so all six consumers -
+ * including wp_version_check() and Site Health - go blind, and the site can no longer
+ * report that it is behind upstream. Keeping the data means we can still see when a
+ * security release lands and merge it deliberately.
+ *
+ * Defined only if the site has not already set it, so wp-config.php still wins.
+ */
+if ( ! defined( 'WP_AUTO_UPDATE_CORE' ) ) {
+    define( 'WP_AUTO_UPDATE_CORE', false );
+}

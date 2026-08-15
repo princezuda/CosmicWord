@@ -5,7 +5,7 @@
  * @package ForkedWord
  */
 
-require ABSPATH . 'wp-includes/option.php';
+require ABSPATH . WPINC . '/option.php';
 
 /**
  * Converts given MySQL date string into a different format.
@@ -6085,7 +6085,7 @@ function wp_trigger_error( $function_name, $message, $error_level = E_USER_NOTIC
 		array( 'http', 'https' )
 	);
 
-//	trigger_error( $message, $error_level );
+	trigger_error( $message, $error_level );
 }
 
 /**

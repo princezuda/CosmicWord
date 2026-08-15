@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 // wp-includes/cosmic/cosmic-plugin-manager.php
 
 if (!defined('ABSPATH')) {
@@ -58,7 +58,25 @@ class CosmicWord_Plugin_Manager {
         );
     }
 
-    // ... [rest of your existing methods] ...
+    /**
+     * Dispatches admin_init actions for this page.
+     *
+     * The constructor hooks admin_init to this method, but it did not exist - PHP fatals
+     * on a callback to an undefined method, so every admin page load would have died if
+     * this class were ever loaded. handle_plugin_installation() was also hooked to nothing,
+     * so the install form posted into a void.
+     */
+    public function handle_actions() {
+        if ( ! is_admin() || ! isset( $_REQUEST['page'] ) || 'cosmic-plugins' !== $_REQUEST['page'] ) {
+            return;
+        }
+
+        $action = isset( $_REQUEST['action'] ) ? sanitize_key( $_REQUEST['action'] ) : '';
+
+        if ( 'install_plugin' === $action && 'POST' === $_SERVER['REQUEST_METHOD'] ) {
+            $this->handle_plugin_installation();
+        }
+    }
 
     public function render_plugin_page() {
         if (!current_user_can('install_plugins')) {

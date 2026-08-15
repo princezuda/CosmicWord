@@ -194,24 +194,36 @@ if ( isset( $plugin_page ) ) {
 		// Back-compat for plugins using add_management_page().
 if ( empty( $page_hook ) && 'edit.php' === $pagenow && get_plugin_page_hook( $plugin_page, 'tools.php' ) ) {
     $redirect_url = 'tools.php';
-    
+
+    // Initialised for both branches; the nonce check below reads it unconditionally.
+    $filtered_params = array();
+
     // Sanitize and rebuild query string
     if ( ! empty( $_SERVER['QUERY_STRING'] ) ) {
+        /*
+         * Allowlisted params mapped to a sanitizer callback.
+         *
+         * FILTER_SANITIZE_STRING was used here previously. It is deprecated as of PHP 8.1
+         * and removed in PHP 9, emits a deprecation notice on every request that reaches
+         * this branch, and mangles input by stripping tags rather than escaping ("a<b>c"
+         * becomes "ac"). The WordPress sanitizers are the supported equivalents.
+         */
         $allowed_params = array(
-            'page' => FILTER_SANITIZE_STRING,
-            'action' => FILTER_SANITIZE_STRING,
-            'post' => FILTER_SANITIZE_NUMBER_INT,
-            'post_type' => FILTER_SANITIZE_STRING,
+            'page'      => 'sanitize_text_field',
+            'action'    => 'sanitize_key',
+            'post'      => 'absint',
+            'post_type' => 'sanitize_key',
             // Add other allowed parameters as needed
         );
-        
+
         // Parse and filter query string
         parse_str($_SERVER['QUERY_STRING'], $params);
         $filtered_params = array();
-        
+
         foreach ($params as $key => $value) {
-            if (isset($allowed_params[$key])) {
-                $filtered_params[$key] = filter_var($value, $allowed_params[$key]);
+            // Only scalar values are expected; an array here means a crafted query string.
+            if (isset($allowed_params[$key]) && is_scalar($value)) {
+                $filtered_params[$key] = call_user_func($allowed_params[$key], $value);
             }
         }
         

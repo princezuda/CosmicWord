@@ -1,7 +1,19 @@
 <?php
+/**
+ * About This Version administration panel.
+ *
+ * @package CosmicWord
+ * @subpackage Administration
+ */
 
+/*
+ * Loads the admin bootstrap, which calls auth_redirect(). Without this the page is
+ * reachable unauthenticated - it is served from wp-admin/ but never loads CosmicWord,
+ * so nothing else gates it.
+ */
+require_once __DIR__ . '/admin.php';
 
-$version = '1.1';
+$version = defined( 'COSMIC_VERSION' ) ? COSMIC_VERSION : '';
 ?>
 <!DOCTYPE html>
 <html>

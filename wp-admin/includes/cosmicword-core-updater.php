@@ -10,12 +10,32 @@ if (!defined('ABSPATH')) {
 
 // Register our update handler
 function cosmicword_handle_update() {
-    if (!isset($_POST['action']) || $_POST['action'] !== 'cosmicword_do_upgrade' || 
-        !check_admin_referer('cosmic-core-upgrade')) {
+    if (!isset($_POST['action']) || $_POST['action'] !== 'cosmicword_do_upgrade') {
         return;
     }
 
-    $url = COSMIC_CORE_URL . 'latest.zip';
+    /*
+     * A nonce proves the request came from a page we rendered; it does not prove the
+     * sender is allowed to perform the action. admin_post_ hooks fire for any authenticated
+     * user, so without this check a Subscriber who obtained a valid nonce could trigger a
+     * core upgrade. Capability first, then nonce.
+     */
+    if (!current_user_can('update_core')) {
+        wp_die(
+            __('Sorry, you are not allowed to update this site.'),
+            __('Insufficient permissions'),
+            array('response' => 403)
+        );
+    }
+
+    check_admin_referer('cosmic-core-upgrade');
+
+    if (!defined('COSMIC_DOWNLOAD_LATEST')) {
+        wp_die(__('CosmicWord update source is not configured.'));
+    }
+
+    // COSMIC_CORE_URL was referenced here but is defined nowhere in the tree (fatal on PHP 8).
+    $url = COSMIC_DOWNLOAD_LATEST;
     $upgrader = new Core_Upgrader();
     $result = $upgrader->upgrade($url);
 
